@@ -76,6 +76,24 @@ export class OllamaService {
         }
     }
 
+    async defineWord(word: string): Promise<{ form: string; meaning: string; example: string }> {
+        const prompt = `Define the English word "${word}" concisely.
+Return ONLY a strict JSON object with this exact structure, no extra text:
+{"form": "ADJ|NOUN|VERB|ADV|PHRASE", "meaning": "Short, clear definition in English.", "example": "A natural example sentence using the word."}`;
+
+        try {
+            const response = await this.generateChatResponse([{ role: 'user', content: prompt }]);
+            const jsonMatch = response.trim().match(/\{.*\}/s);
+            if (jsonMatch) {
+                return JSON.parse(jsonMatch[0]);
+            }
+            throw new Error('Could not parse definition response');
+        } catch (error) {
+            console.error('defineWord failed:', error);
+            throw error;
+        }
+    }
+
     async translate(text: string, direction: 'es-en' | 'en-es'): Promise<string> {
         const sourceLang = direction === 'es-en' ? 'Spanish' : 'English';
         const targetLang = direction === 'es-en' ? 'English' : 'Spanish';

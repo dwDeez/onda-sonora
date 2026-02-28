@@ -7,10 +7,23 @@ export default function Studio() {
   const [ttsAudioUrl, setTtsAudioUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // --- Transcription tab state ---
   const [isRecording, setIsRecording] = useState(false);
-  const [transcription, setTranscription] = useState('');
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const [interimText, setInterimText] = useState('');
+  const recognitionRef = useRef<any>(null);
+  const isRecordingRef = useRef<boolean>(false);
+
+  // Interlinear mode
+  const [interlinearMode, setInterlinearMode] = useState(false);
+  const [transcribeDirection, setTranscribeDirection] = useState<'es-en' | 'en-es'>('es-en');
+
+  interface Segment {
+    id: number;
+    original: string;
+    translation: string | null;
+    isTranslating: boolean;
+  }
+  const [segments, setSegments] = useState<Segment[]>([]);
 
   // Translator state
   const [translateText, setTranslateText] = useState('');
@@ -38,52 +51,94 @@ export default function Studio() {
     }
   };
 
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
+  // Refs so closures inside recognition handlers see latest values
+  const interlinearModeRef = useRef(false);
+  const transcribeDirectionRef = useRef<'es-en' | 'en-es'>('es-en');
 
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
+  const addSegment = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const id = Date.now() + Math.random();
+    const newSeg: Segment = { id, original: trimmed, translation: null, isTranslating: interlinearModeRef.current };
+    setSegments(prev => [...prev, newSeg]);
 
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        await handleTranscribe(audioBlob);
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (error) {
-      console.error('Error accessing microphone:', error);
+    if (interlinearModeRef.current) {
+      try {
+        const translated = await ollama.translate(trimmed, transcribeDirectionRef.current);
+        setSegments(prev =>
+          prev.map(s => s.id === id ? { ...s, translation: translated, isTranslating: false } : s)
+        );
+      } catch {
+        setSegments(prev =>
+          prev.map(s => s.id === id ? { ...s, translation: '[translation error]', isTranslating: false } : s)
+        );
+      }
     }
+  };
+
+  const startRecording = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      addSegment('Error: Speech recognition is not supported in this browser. Please use Chrome or Edge.');
+      return;
+    }
+    setInterimText('');
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = transcribeDirectionRef.current === 'es-en' ? 'es-ES' : 'en-US';
+
+    recognition.onresult = (event: any) => {
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          addSegment(transcript);
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+      setInterimText(interimTranscript);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error);
+    };
+
+    recognition.onend = () => {
+      if (recognitionRef.current === recognition && isRecordingRef.current) {
+        recognition.start();
+      }
+    };
+
+    recognitionRef.current = recognition;
+    isRecordingRef.current = true;
+    recognition.start();
+    setIsRecording(true);
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-      setIsRecording(false);
-    }
+    isRecordingRef.current = false;
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setInterimText('');
+    setIsRecording(false);
   };
 
-  const handleTranscribe = async (audioBlob: Blob) => {
-    setIsGenerating(true);
-    setTranscription('Transcribing...');
-    try {
-      // For local transcription, we advise the user to use the real-time 'Void' session
-      setTranscription("Local transcription from audio files requires a client-side STT library. Please use the real-time 'Void' session for local speech-to-text.");
-      setIsGenerating(false);
-    } catch (error) {
-      console.error('Error transcribing audio:', error);
-      setTranscription('Error: Transcription failed.');
-      setIsGenerating(false);
-    }
+  // Keep refs in sync
+  const handleSetInterlinear = (val: boolean) => {
+    interlinearModeRef.current = val;
+    setInterlinearMode(val);
   };
+  const handleSetTranscribeDirection = (val: 'es-en' | 'en-es') => {
+    transcribeDirectionRef.current = val;
+    setTranscribeDirection(val);
+  };
+
+  const fullTranscriptText = segments.map(s =>
+    interlinearMode ? `${s.original}\n${s.translation ?? ''}` : s.original
+  ).join('\n\n');
 
   const handleTranslate = async () => {
     if (!translateText.trim() || isTranslating) return;
@@ -183,12 +238,53 @@ export default function Studio() {
 
         {activeTab === 'transcribe' && (
           <div className="w-full max-w-2xl bg-surface border border-[#333] rounded-xl p-8 shadow-2xl">
-            <div className="flex items-center gap-3 mb-6">
-              <span className="material-symbols-outlined text-primary text-[24px]">speech_to_text</span>
-              <h3 className="text-white text-xl font-bold tracking-tight">Audio Transcription</h3>
+            {/* Header */}
+            <div className="flex items-start justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-primary text-[24px]">speech_to_text</span>
+                <h3 className="text-white text-xl font-bold tracking-tight">Audio Transcription</h3>
+              </div>
+              {/* Controls */}
+              <div className="flex flex-col items-end gap-2">
+                {/* Direction toggle */}
+                <button
+                  disabled={isRecording}
+                  onClick={() => handleSetTranscribeDirection(transcribeDirection === 'es-en' ? 'en-es' : 'es-en')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#111815] border border-[#2a3830] text-primary text-[10px] font-mono rounded-lg hover:border-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  title="Toggle transcription language"
+                >
+                  <span className="material-symbols-outlined text-[14px]">swap_horiz</span>
+                  <span>{transcribeDirection === 'es-en' ? 'ES → EN' : 'EN → ES'}</span>
+                </button>
+                {/* Interlinear toggle */}
+                <button
+                  onClick={() => handleSetInterlinear(!interlinearMode)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-mono rounded-lg border transition-all ${interlinearMode
+                    ? 'bg-primary/15 border-primary/40 text-primary'
+                    : 'bg-[#111815] border-[#2a3830] text-muted hover:text-white'}`}
+                  title="Toggle interlinear translation"
+                >
+                  <span className="material-symbols-outlined text-[14px]">translate</span>
+                  <span>INTERLINEAR {interlinearMode ? 'ON' : 'OFF'}</span>
+                </button>
+              </div>
             </div>
 
-            <div className="flex flex-col items-center justify-center py-12 border-2 border-dashed border-[#333] rounded-xl mb-6 bg-background-dark/50">
+            {/* Lang badge */}
+            <div className="flex items-center gap-2 mb-5">
+              <span className="text-[10px] font-mono text-muted bg-[#111815] border border-[#2a3830] px-2 py-0.5 rounded">
+                {transcribeDirection === 'es-en' ? '🎙 Español' : '🎙 English'}
+              </span>
+              {interlinearMode && (
+                <span className="text-[10px] font-mono text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[12px]">translate</span>
+                  {transcribeDirection === 'es-en' ? '→ English' : '→ Español'}
+                </span>
+              )}
+            </div>
+
+            {/* Mic button */}
+            <div className="flex flex-col items-center justify-center py-10 border-2 border-dashed border-[#333] rounded-xl mb-6 bg-background-dark/50">
               <button
                 onClick={isRecording ? stopRecording : startRecording}
                 className={`w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 ${isRecording
@@ -205,15 +301,56 @@ export default function Studio() {
               </p>
             </div>
 
-            {(transcription || isGenerating) && (
+            {/* Output */}
+            {(segments.length > 0 || interimText) && (
               <div className="w-full bg-background-dark border border-[#333] rounded-lg p-6">
-                <div className="flex items-center gap-2 mb-4 opacity-50">
-                  <span className="material-symbols-outlined text-[14px]">description</span>
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-primary">TRANSCRIPT_OUTPUT</span>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 opacity-50">
+                    <span className="material-symbols-outlined text-[14px]">description</span>
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-primary">TRANSCRIPT_OUTPUT</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {segments.length > 0 && (
+                      <button
+                        onClick={() => copyToClipboard(fullTranscriptText)}
+                        className="p-1 text-muted hover:text-primary transition-colors"
+                        title="Copy transcript"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">content_copy</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { setSegments([]); setInterimText(''); }}
+                      className="p-1 text-muted hover:text-accent transition-colors"
+                      title="Clear transcript"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                    </button>
+                  </div>
                 </div>
-                <p className="text-white font-light leading-relaxed whitespace-pre-wrap">
-                  {transcription}
-                </p>
+
+                <div className="flex flex-col gap-4">
+                  {segments.map((seg, idx) => (
+                    <div key={idx} className="flex flex-col gap-1">
+                      {/* Original line */}
+                      <p className="text-white font-light leading-relaxed">{seg.original}</p>
+                      {/* Translation line */}
+                      {interlinearMode && (
+                        <div className="flex items-start gap-2 pl-3 border-l-2 border-primary/30">
+                          {seg.isTranslating ? (
+                            <span className="text-muted/50 text-sm font-mono animate-pulse">translating...</span>
+                          ) : (
+                            <p className="text-primary/80 text-sm font-light leading-relaxed italic">{seg.translation}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {/* Interim (live) */}
+                  {interimText && (
+                    <p className="text-muted/60 italic font-light leading-relaxed">{interimText}</p>
+                  )}
+                </div>
               </div>
             )}
           </div>

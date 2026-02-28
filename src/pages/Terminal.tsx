@@ -10,6 +10,7 @@ export default function Terminal() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -25,6 +26,7 @@ export default function Terminal() {
 
     const userMessage = input;
     setInput('');
+    inputRef.current?.focus();
     setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
     setIsLoading(true);
 
@@ -116,6 +118,7 @@ export default function Terminal() {
         <form onSubmit={handleSubmit} className="relative flex items-center">
           <span className="absolute left-4 text-primary material-symbols-outlined">chevron_right</span>
           <input
+            ref={inputRef}
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}

@@ -63,6 +63,13 @@ class SessionResponse(BaseModel):
     score: int
     issues: List[IssueResponse] = []
 
+class VocabCreate(BaseModel):
+    user_id: int
+    word: str
+    form: str
+    meaning: str
+    example: str
+
 class VocabResponse(BaseModel):
     id: int
     word: str
@@ -191,16 +198,46 @@ def create_session(session: SessionCreate):
     }
 
 @app.get("/api/vocab", response_model=List[VocabResponse])
-def get_vocab(user_id: Optional[int] = None):
+def get_vocab(user_id: Optional[int] = None, search: Optional[str] = None):
     conn = get_db()
     cursor = conn.cursor()
-    if user_id:
-        cursor.execute("SELECT * FROM vocab_bank WHERE user_id = ?", (user_id,))
+    if user_id and search:
+        cursor.execute(
+            "SELECT * FROM vocab_bank WHERE user_id = ? AND (LOWER(word) LIKE ? OR LOWER(meaning) LIKE ?)",
+            (user_id, f"%{search.lower()}%", f"%{search.lower()}%")
+        )
+    elif user_id:
+        cursor.execute("SELECT * FROM vocab_bank WHERE user_id = ? ORDER BY id DESC", (user_id,))
     else:
-        cursor.execute("SELECT * FROM vocab_bank")
+        cursor.execute("SELECT * FROM vocab_bank ORDER BY id DESC")
     words = cursor.fetchall()
     conn.close()
     return [dict(w) for w in words]
+
+@app.post("/api/vocab", response_model=VocabResponse, status_code=201)
+def create_vocab(vocab: VocabCreate):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO vocab_bank (user_id, word, form, meaning, example) VALUES (?, ?, ?, ?, ?)",
+        (vocab.user_id, vocab.word, vocab.form, vocab.meaning, vocab.example)
+    )
+    word_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return {**vocab.dict(), "id": word_id}
+
+@app.delete("/api/vocab/{word_id}")
+def delete_vocab(word_id: int):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM vocab_bank WHERE id = ?", (word_id,))
+    if cursor.rowcount == 0:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Word not found")
+    conn.commit()
+    conn.close()
+    return {"message": "Word deleted"}
 @app.delete("/api/sessions/{session_id}")
 def delete_session(session_id: int):
     conn = get_db()
