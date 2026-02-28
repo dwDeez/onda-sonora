@@ -1,7 +1,7 @@
 # 🌊 Onda Sonora
 
 <div align="center">
-  <img width="800" alt="Onda Sonora Banner" src="file:///home/developer/.gemini/antigravity/brain/09710b78-1325-4318-894f-864a7e1ff430/onda_sonora_dashboard_mockup_1772292996254.png" />
+  <img width="800" alt="Onda Sonora Banner" src="docs/images/banner.png" />
   
   <p align="center">
     <img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
@@ -33,7 +33,10 @@
 
 ## 🚀 Sobre el Proyecto
 
-**Onda Sonora** es una plataforma de aprendizaje de idiomas diseñada para ofrecer una experiencia inmersiva y moderna. Combinando un frontend React de alto rendimiento con un backend FastAPI eficiente, permitimos a los usuarios practicar traducción, gestionar su vocabulario y realizar sesiones de práctica en tiempo real potenciadas por **Ollama**.
+**Onda Sonora** es una plataforma de aprendizaje de idiomas diseñada para ofrecer una experiencia inmersiva y moderna. Combinando un frontend React de alto rendimiento con un backend FastAPI eficiente, permitimos a los usuarios practicar traducción, gestionar su vocabulario y realizar sesiones de práctica en tiempo real potenciadas por **Ollama**.  
+
+Lo que hace único a Onda Sonora es su compromiso con la **libertad de aprendizaje**: aprovechamos modelos **open‑source** ligeros como *llama3*, que se ejecutan directamente en tu computador. Esto significa que puedes entrenar y practicar idiomas de manera **local**, sin depender de créditos, suscripciones ni límites externos. Con esta arquitectura, cada estudiante tiene acceso ilimitado a un entorno de estudio potente y accesible, capaz de funcionar con modelos optimizados para ofrecer una experiencia fluida y sin restricciones.
+
 
 ---
 
@@ -53,17 +56,21 @@
 
 <div align="center">
 
+## 🏠 Inicio
+*Pantalla principal de bienvenida y acceso rápido a las funciones.
+![Inicio](docs/images/inicio.png)
+
 ### 🏠 Dashboard Principal
 *Muestra de la vista general del usuario, metas y progreso.*  
-`[ INSERTAR CAPTURA DE PANTALLA: DASHBOARD ]`
+![Dashboard Principal](docs/images/dashboard.png)
 
 ### 🎨 Studio & Traductor
 *Herramienta de traducción en tiempo real con IA.*  
-`[ INSERTAR CAPTURA DE PANTALLA: STUDIO ]`
+![Studio & Traductor](docs/images/studio.png)
 
 ### 📚 Banco de Vocabulario
 *Gestión de palabras personalizadas.*  
-`[ INSERTAR CAPTURA DE PANTALLA: VOCABULARIO ]`
+![Banco de Vocabulario](docs/images/vocabulario.png)
 
 </div>
 
